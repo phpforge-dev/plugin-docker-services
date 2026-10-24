@@ -5,7 +5,10 @@ use std::{
     collections::HashMap,
     path::Path,
     process::Stdio,
-    sync::{Arc, Mutex as StdMutex},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex as StdMutex,
+    },
     time::Duration,
 };
 use tauri::{AppHandle, Emitter};
@@ -13,6 +16,7 @@ use tokio::{io::AsyncReadExt, process::Command, sync::Mutex};
 
 pub struct Docker {
     program: String,
+    paused: AtomicBool,
     mutation: Mutex<()>,
     operations: StdMutex<HashMap<String, Arc<tokio::sync::Notify>>>,
 }
@@ -35,6 +39,7 @@ impl Default for Docker {
             } else {
                 "docker".into()
             },
+            paused: AtomicBool::new(false),
             mutation: Mutex::new(()),
             operations: StdMutex::new(HashMap::new()),
         }
@@ -65,6 +70,20 @@ fn lines(text: &str) -> Res<Vec<Value>> {
         .collect()
 }
 impl Docker {
+    /// Revoke a plugin generation before releasing UI capabilities. A new authorized activation must resume it.
+    pub fn shutdown(&self) {
+        if let Ok(mut operations) = self.operations.lock() {
+            self.paused.store(true, Ordering::Release);
+            for (_, signal) in operations.drain() {
+                signal.notify_one();
+            }
+        }
+    }
+    pub fn resume(&self) {
+        if let Ok(_operations) = self.operations.lock() {
+            self.paused.store(false, Ordering::Release);
+        }
+    }
     pub fn executable(&self) -> &str {
         &self.program
     }
@@ -78,23 +97,25 @@ impl Docker {
         seconds: u64,
         progress: Option<(AppHandle, String)>,
     ) -> Res<(String, String)> {
-        let mut guard = None;
-        let cancel = if let Some((_, id)) = &progress {
-            let signal = Arc::new(tokio::sync::Notify::new());
+        let operation_id = progress
+            .as_ref()
+            .map(|(_, id)| id.clone())
+            .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+        let signal = Arc::new(tokio::sync::Notify::new());
+        {
             let mut ops = self.operations.lock().map_err(err)?;
-            if ops.contains_key(id) {
+            if self.paused.load(Ordering::Acquire) {
+                return Err("Plugin Docker desativado".into());
+            }
+            if ops.contains_key(&operation_id) {
                 return Err("Operação Docker já existe".into());
             }
-            ops.insert(id.clone(), signal.clone());
-            guard = Some(Operation {
-                owner: self,
-                id: id.clone(),
-            });
-            Some(signal)
-        } else {
-            None
+            ops.insert(operation_id.clone(), signal.clone());
+        }
+        let _guard = Operation {
+            owner: self,
+            id: operation_id,
         };
-        let _guard = guard;
         let mut child=Command::new(&self.program).args(args).current_dir(root).env("DOCKER_CLI_HINTS","false").env("COMPOSE_ANSI","never").stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped()).kill_on_drop(true).spawn().map_err(|e|format!("Docker CLI indisponível: {e}. Instale Docker Desktop ou adicione docker ao PATH."))?;
         let stdout = child.stdout.take().ok_or("stdout Docker ausente")?;
         let stderr = child.stderr.take().ok_or("stderr Docker ausente")?;
@@ -115,7 +136,7 @@ impl Docker {
         });
         tokio::select! {
             result=work=>result.map_err(|_|format!("Docker não respondeu em {seconds}s. Verifique se o engine está iniciado e se o contexto é acessível; tente conectar novamente."))?,
-            _=async{if let Some(signal)=cancel{signal.notified().await;}else{std::future::pending::<()>().await;}}=>Err("Operação Docker interrompida. Atualize os recursos para conferir o estado do engine; cancelar o CLI não reverte alterações já realizadas.".into())
+            _=signal.notified()=>Err("Operação Docker interrompida. Atualize os recursos para conferir o estado do engine; cancelar o CLI não reverte alterações já realizadas.".into())
         }
     }
     pub fn cancel(&self, id: &str) -> Res<Value> {
@@ -393,6 +414,53 @@ async fn capture(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn shutdown_cancels_unreported_commands_and_blocks_late_runs() {
+        let docker = Arc::new(Docker {
+            program: "/bin/sh".into(),
+            ..Docker::default()
+        });
+        let owner = docker.clone();
+        let task = tokio::spawn(async move {
+            owner
+                .run(
+                    Path::new("/tmp"),
+                    &["-c".into(), "exec sleep 30".into()],
+                    40,
+                )
+                .await
+        });
+        for _ in 0..100 {
+            if !docker.operations.lock().unwrap().is_empty() {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+        docker.shutdown();
+        let result = tokio::time::timeout(Duration::from_secs(2), task)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(result.is_err());
+        assert!(docker
+            .run(Path::new("/tmp"), &["-c".into(), "printf late".into()], 2)
+            .await
+            .is_err());
+        docker.resume();
+        assert_eq!(
+            docker
+                .run(
+                    Path::new("/tmp"),
+                    &["-c".into(), "printf resumed".into()],
+                    2
+                )
+                .await
+                .unwrap()
+                .0,
+            "resumed"
+        );
+    }
     #[test]
     fn arguments_are_not_shell_commands() {
         assert!(container_id("abcdef012345").is_ok());
