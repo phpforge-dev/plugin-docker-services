@@ -1,5 +1,3 @@
-
-
 #docker-panel{height:340px;min-height:210px;flex-shrink:0;display:flex;flex-direction:column;border-top:1px solid var(--border);background:var(--panel);overflow:hidden}
 .services-head{height:40px;min-height:40px;box-sizing:border-box;display:flex;align-items:center;gap:8px;padding:0 8px 0 12px;border-bottom:0;font-size:13px}
 .services-head strong{font-weight:600}
@@ -53,16 +51,31 @@
 .docker-dialog>div,.docker-dialog form>div{display:flex;gap:10px;justify-content:flex-end;margin-top:20px}
 .docker-dialog button{padding:7px 12px}
 .docker-dialog input{box-sizing:border-box;width:100%;padding:8px}
-
 #docker-panel{position:relative}
 #docker-resize{position:absolute;top:0;left:0;right:0;height:4px;z-index:5;cursor:ns-resize;touch-action:none}
 #docker-resize:hover,#docker-resize:focus{background:var(--accent);outline:none}
-
 .docker-job{display:flex;align-items:center;border-top:1px solid var(--border);min-height:0}
 #docker-message{flex:1;border-top:0;white-space:pre-wrap}
 .docker-job:has(#docker-message:empty):has(#docker-cancel[hidden]){display:none}
 #docker-cancel{font-size:10px;padding:4px 8px;margin:4px 8px;flex:none}
-
+.docker-resource[data-state=running] span{color:var(--success)}
+#show-docker{order:10}
+#docker-hide{width:24px;height:24px;padding:0;border:0;border-radius:var(--ij-control-radius-compact);background:transparent;color:var(--ij-text-secondary);font-size:0;line-height:0;display:grid;place-items:center;flex:none;margin-left:2px}
+#docker-hide::before{content:'';width:16px;height:16px;background:currentColor;-webkit-mask:url("./assets/jetbrains-icons/general/hide_dark.svg") center/contain no-repeat;mask:url("./assets/jetbrains-icons/general/hide_dark.svg") center/contain no-repeat}
+#docker-hide:hover{background:var(--ij-hover);color:var(--ij-text)}
+.services-head,.docker-detail-head{display:flex;align-items:center;min-height:var(--ij-header-height);height:var(--ij-header-height);box-sizing:border-box;background:transparent;border-bottom:0;font-size:var(--ij-font-size);gap:6px;padding:0 8px 0 12px;flex-shrink:0;overflow:hidden}
+.services-head>strong:first-child{font-weight:600;margin-right:6px;color:var(--ij-text);white-space:nowrap;flex:none}
+.services-head>span{color:var(--ij-text-secondary);font-size:var(--ij-font-size-small)}
+.docker-tabs{display:flex;align-items:center;gap:2px;min-height:var(--ij-tab-height);padding:4px 8px;border-bottom:0;background:transparent}
+.docker-tabs button{height:var(--ij-tab-height);align-self:center;padding:0 8px;border:1px solid transparent!important;border-radius:var(--ij-tab-radius)!important;background:transparent!important;color:var(--ij-text-inactive-tab);font-size:var(--ij-font-size);box-sizing:border-box;white-space:nowrap}
+.docker-tabs button[aria-selected=true]{background:var(--ij-tab-selected)!important;border-color:var(--ij-tab-selected-border)!important;color:var(--ij-text)!important}
+.services-head>button:not(#docker-hide){border:0;background:transparent;color:var(--ij-text-secondary);border-radius:var(--ij-control-radius-compact);font-size:var(--ij-font-size-small);padding:4px 6px;height:28px}
+.services-head>button:not(#docker-hide):hover{background:var(--ij-hover);color:var(--ij-text)}
+#docker-tree summary{box-sizing:border-box;min-height:var(--ij-row-height);font-size:var(--ij-font-size)}
+#docker-tree summary{height:var(--ij-row-height);padding:0 10px;display:flex;align-items:center}
+.docker-resource{min-height:var(--ij-row-height);padding-top:2px;padding-bottom:2px;border-radius:var(--ij-control-radius-compact)}
+.docker-resource:hover{background:var(--ij-list-hover)}
+.docker-resource[aria-pressed=true]{background:var(--ij-selection)}
 .services-head{height:40px;min-height:40px;box-sizing:border-box}
 .services-head strong{font-weight:600}
 .services-head #docker-summary{margin-left:auto;font-size:11px}
@@ -106,41 +119,5 @@
 .docker-log-tools input[type=search]{width:130px;min-width:70px;flex:1;background:var(--surface);border:0;padding:5px 7px;font-size:10px}
 .docker-log-tools input[type=checkbox]{width:auto}
 .docker-log-tools label{display:flex;align-items:center;gap:4px}
-.docker-layout{grid-template-columns:210px minmax(0,1fr)}
-.docker-layout{grid-template-columns:180px minmax(230px,1fr)}
-.docker-layout{overflow:auto}
-
-
-.docker-resource[data-state=running] span,#test-summary[data-state=passed],[data-status=passed] .test-icon{color:var(--success)}
-
-.hide-tool,#terminal-hide,#docker-hide,#debug-hide,#test-hide,#git-log-hide,#composer-hide{width:24px;height:24px;padding:0;border:0;border-radius:var(--ij-control-radius-compact);background:transparent;color:var(--ij-text-secondary);font-size:0;line-height:0;display:grid;place-items:center;flex:none;margin-left:2px}
-
-.hide-tool::before,#terminal-hide::before,#docker-hide::before,#debug-hide::before,#test-hide::before,#git-log-hide::before,#composer-hide::before{content:'';width:16px;height:16px;background:currentColor;-webkit-mask:url("./assets/jetbrains-icons/general/hide_dark.svg") center/contain no-repeat;mask:url("./assets/jetbrains-icons/general/hide_dark.svg") center/contain no-repeat}
-
-.hide-tool:hover,#terminal-hide:hover,#docker-hide:hover,#debug-hide:hover,#test-hide:hover,#git-log-hide:hover,#composer-hide:hover{background:var(--ij-hover);color:var(--ij-text)}
-
-.tool-window-head,.terminal-toolbar,.test-toolbar,.services-head,.debug-toolbar,.composer-toolbar,.docker-detail-head{display:flex;align-items:center;min-height:var(--ij-header-height);height:var(--ij-header-height);box-sizing:border-box;background:transparent;border-bottom:0;font-size:var(--ij-font-size);gap:6px;padding:0 8px 0 12px;flex-shrink:0;overflow:hidden}
-
-.tool-window-head>strong:first-child,.terminal-toolbar>strong:first-child,.test-toolbar>strong:first-child,.services-head>strong:first-child,.debug-toolbar>strong:first-child,.composer-toolbar>strong:first-child{font-weight:600;margin-right:6px;color:var(--ij-text);white-space:nowrap;flex:none}
-
-.services-head>span{color:var(--ij-text-secondary);font-size:var(--ij-font-size-small)}
-
-.docker-tabs,.debug-tabs,#git-panel>.switch{display:flex;align-items:center;gap:2px;min-height:var(--ij-tab-height);padding:4px 8px;border-bottom:0;background:transparent}
-
-.tool-window-tab,#terminal-tabs button,.docker-tabs button,#git-panel>.switch button,.ds-tabs button,.debug-tabs button,.test-toolbar button[aria-pressed]{height:var(--ij-tab-height);align-self:center;padding:0 8px;border:1px solid transparent!important;border-radius:var(--ij-tab-radius)!important;background:transparent!important;color:var(--ij-text-inactive-tab);font-size:var(--ij-font-size);box-sizing:border-box;white-space:nowrap}
-
-.tool-window-tab,#terminal-tabs button[aria-pressed=true],.docker-tabs button[aria-selected=true],#git-panel>.switch button[aria-pressed=true],.ds-tabs button[aria-selected=true],.debug-tabs button[aria-selected=true],.test-toolbar button[aria-pressed=true]{background:var(--ij-tab-selected)!important;border-color:var(--ij-tab-selected-border)!important;color:var(--ij-text)!important}
-
-.terminal-toolbar>#terminal-new,.terminal-toolbar>#terminal-kill,.tool-window-head>button:not(#git-log-hide),.debug-toolbar>button:not(#debug-hide),.test-toolbar>button:not(#test-hide):not([aria-pressed]),.composer-toolbar>button:not(#composer-hide),.services-head>button:not(#docker-hide){border:0;background:transparent;color:var(--ij-text-secondary);border-radius:var(--ij-control-radius-compact);font-size:var(--ij-font-size-small);padding:4px 6px;height:28px}
-
-.terminal-toolbar>#terminal-new:hover,.terminal-toolbar>#terminal-kill:hover,.tool-window-head>button:not(#git-log-hide):hover,.debug-toolbar>button:not(#debug-hide):hover,.test-toolbar>button:not(#test-hide):not([aria-pressed]):hover,.composer-toolbar>button:not(#composer-hide):hover,.services-head>button:not(#docker-hide):hover{background:var(--ij-hover);color:var(--ij-text)}
-
-#docker-tree summary,#git-log-refs button,.git-commit-row,.git-file-row,#git-changes summary,#db-sources .db-source-title,.db-table,#debug-frames button,#test-list button,.composer-row,.debug-row{box-sizing:border-box;min-height:var(--ij-row-height);font-size:var(--ij-font-size)}
-
-#docker-tree summary{height:var(--ij-row-height);padding:0 10px;display:flex;align-items:center}
-
-.docker-resource{min-height:var(--ij-row-height);padding-top:2px;padding-bottom:2px;border-radius:var(--ij-control-radius-compact)}
-
-#git-log-refs button:hover,.git-commit-row:hover,.git-file-row:hover,#debug-frames button:hover,.debug-row:hover,#test-list button:hover,.composer-row:hover,.docker-resource:hover{background:var(--ij-list-hover)}
-
-#git-log-refs button[aria-pressed=true],.git-commit-row[aria-pressed=true],#debug-frames button[aria-selected=true],#test-list button[aria-selected=true],.docker-resource[aria-pressed=true],#db-sources .db-source-title[aria-selected=true]{background:var(--ij-selection)}
+@media(max-width:1050px){.docker-layout{grid-template-columns:210px minmax(0,1fr)}}
+@media(max-width:700px){.docker-layout{grid-template-columns:180px minmax(230px,1fr)}.docker-layout{overflow:auto}}
