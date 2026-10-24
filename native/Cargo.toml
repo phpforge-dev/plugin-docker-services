@@ -1,0 +1,12 @@
+[package]
+name="phpforge-docker-services"
+version="1.0.0"
+edition="2021"
+license="MIT"
+[dependencies]
+serde_json="1"
+tauri={version="2",features=[]}
+tokio={version="1",features=["full"]}
+uuid={version="1",features=["v4"]}
+[dev-dependencies]
+tempfile="3"
