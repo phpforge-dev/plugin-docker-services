@@ -63,6 +63,28 @@ fn image_reference(reference: &str) -> Res<()> {
     }
     Ok(())
 }
+/// Compose service keys from the specification: no flags, spaces or shell syntax.
+pub fn compose_service(name: &str) -> Res<()> {
+    if name.is_empty()
+        || name.len() > 128
+        || !name.as_bytes()[0].is_ascii_alphanumeric()
+        || !name
+            .bytes()
+            .all(|c| c.is_ascii_alphanumeric() || b"._-".contains(&c))
+    {
+        return Err("Nome de serviço Compose inválido".into());
+    }
+    Ok(())
+}
+/// Compose files named by the Compose conventions (compose.yaml, docker-compose.override.yml…).
+fn compose_name(file: &str) -> bool {
+    let name = file.rsplit('/').next().unwrap_or(file).to_ascii_lowercase();
+    let stem = name
+        .strip_suffix(".yaml")
+        .or_else(|| name.strip_suffix(".yml"));
+    stem.and_then(|s| s.strip_prefix("docker-").or(Some(s)))
+        .is_some_and(|s| s == "compose" || s.starts_with("compose.") || s.starts_with("compose-"))
+}
 fn lines(text: &str) -> Res<Vec<Value>> {
     text.lines()
         .filter(|l| !l.trim().is_empty())
@@ -218,6 +240,22 @@ impl Docker {
         .map(|s| s.to_string())
         .collect()
     }
+    /// Root files from the selector, or any conventionally named Compose file inside the project.
+    pub fn compose_file(root: &Path, file: &str) -> Res<()> {
+        if Self::compose_files(root).iter().any(|f| f == file) {
+            confined(root, file)?;
+            return Ok(());
+        }
+        if file.starts_with('-')
+            || Path::new(file).is_absolute()
+            || file.contains('\\')
+            || !compose_name(file)
+            || !confined(root, file)?.is_file()
+        {
+            return Err("Selecione um arquivo Compose do projeto".into());
+        }
+        Ok(())
+    }
     pub async fn dispatch(
         &self,
         root: &Path,
@@ -346,11 +384,19 @@ impl Docker {
             }
             "dockerCompose" => {
                 let file = get(1)?;
-                if !Self::compose_files(root).iter().any(|f| f == file) {
-                    return Err("Selecione um arquivo Compose da raiz do projeto".into());
-                }
-                confined(root, file)?;
+                Self::compose_file(root, file)?;
                 let action = get(2)?;
+                // Optional single service, used by the editor gutter (up/stop only).
+                let service = args
+                    .get(4)
+                    .and_then(Value::as_str)
+                    .filter(|s| !s.is_empty());
+                if let Some(service) = service {
+                    compose_service(service)?;
+                    if action != "up" && action != "stop" {
+                        return Err("Ação Compose inválida".into());
+                    }
+                }
                 let mut argv = vec!["compose", "--ansi", "never", "-f", file];
                 match action {
                     "services" => argv.extend(["config", "--services"]),
@@ -359,6 +405,7 @@ impl Docker {
                     "build" => argv.push("build"),
                     _ => return Err("Ação Compose inválida".into()),
                 }
+                argv.extend(service);
                 let _lock = self.mutation.lock().await;
                 let (out, error) = self
                     .command_report(
@@ -460,6 +507,37 @@ mod tests {
                 .0,
             "resumed"
         );
+    }
+    #[test]
+    fn compose_services_and_nested_files_are_validated() {
+        for name in ["cache", "cache.read1", "app_1", "web-2"] {
+            assert!(compose_service(name).is_ok(), "{name}");
+        }
+        for name in ["", "-d", "--build", "a b", "a;b", "../x", "$(id)"] {
+            assert!(compose_service(name).is_err(), "{name}");
+        }
+        let d = tempfile::tempdir().unwrap();
+        let root = d.path().canonicalize().unwrap();
+        std::fs::create_dir_all(root.join("docker")).unwrap();
+        for f in [
+            "docker/compose.yaml",
+            "docker/docker-compose.override.yml",
+            "docker/app.yml",
+        ] {
+            std::fs::write(root.join(f), "services: {}\n").unwrap();
+        }
+        assert!(Docker::compose_file(&root, "docker/compose.yaml").is_ok());
+        assert!(Docker::compose_file(&root, "docker/docker-compose.override.yml").is_ok());
+        for f in [
+            "docker/app.yml",
+            "missing/compose.yaml",
+            "../compose.yaml",
+            "-compose.yaml",
+        ] {
+            assert!(Docker::compose_file(&root, f).is_err(), "{f}");
+        }
+        let abs = root.join("docker/compose.yaml");
+        assert!(Docker::compose_file(&root, abs.to_str().unwrap()).is_err());
     }
     #[test]
     fn arguments_are_not_shell_commands() {

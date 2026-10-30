@@ -1,4 +1,5 @@
-import {tr,msg,html,dockWindow,resizeToolWindow,toolIcon,editorFont,keymap,fileIcon,activeLanguage,monaco,own,on,every} from './sdk';
+import {tr,msg,html,dockWindow,resizeToolWindow,toolIcon,editorFont,keymap,fileIcon,activeLanguage,monaco,host,own,on,every} from './sdk';
+import {mountComposeGutter} from './compose-gutter';
 
 
 
@@ -10,7 +11,7 @@ export function mountDocker(api:IdeApi, terminal:{docker(context:string,containe
  const el=<T extends HTMLElement=HTMLElement>(id:string)=>document.getElementById(id) as T;
  const icons:Record<string,string>={start:'<path d="m8 4 12 8-12 8Z"/>',stop:'<rect x="5" y="5" width="14" height="14"/>',restart:'<path d="M20 7v5h-5M20 12a8 8 0 1 0-2 6"/>',rm:'<path d="M4 6h16M8 6V3h8v3M6 6l1 15h10l1-15M10 10v7m4-7v7"/>',terminal:'<path d="m4 5 7 7-7 7m10 0h6"/>'};
  panel.querySelectorAll<HTMLButtonElement>('[data-action]').forEach(b=>toolIcon(b,icons[b.dataset.action!],b.textContent!));toolIcon(el('docker-exec'),icons.terminal,tr('Terminal'));
- let menu:HTMLElement|undefined;
+ let menu:HTMLElement|undefined;let resetGutter=()=>{};
  own(()=>{projectEpoch++;epoch++;logsEpoch++;dismissMenu();});
  function dismissMenu(){menu?.remove();menu=undefined;}
  function contextMenu(x:number,y:number){dismissMenu();menu=document.createElement('div');menu.className='tool-context-menu';menu.setAttribute('role','menu');for(const source of panel.querySelectorAll<HTMLButtonElement>('#docker-actions button')){const item=document.createElement('button');item.textContent=source.getAttribute('aria-label');item.disabled=source.disabled;item.setAttribute('role','menuitem');item.onclick=()=>{dismissMenu();source.click();};menu.append(item);}document.body.append(menu);menu.style.left=Math.min(x,window.innerWidth-menu.offsetWidth-8)+'px';menu.style.top=Math.min(y,window.innerHeight-menu.offsetHeight-8)+'px';menu.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus();}
@@ -64,9 +65,22 @@ export function mountDocker(api:IdeApi, terminal:{docker(context:string,containe
  function renderLogs(){const query=el<HTMLInputElement>('docker-log-search').value.toLowerCase();el('docker-logs').textContent=(query?rawLogs.split('\n').filter(line=>line.toLowerCase().includes(query)).join('\n'):rawLogs)||tr('Nenhuma linha de log para exibir.');}
  el('docker-log-search').oninput=renderLogs;
  el('docker-show-stopped').onchange=render;el('docker-expand').onclick=()=>panel.querySelectorAll<HTMLDetailsElement>('#docker-tree details').forEach(d=>d.open=true);el('docker-collapse').onclick=()=>panel.querySelectorAll<HTMLDetailsElement>('#docker-tree details').forEach(d=>d.open=false);
- function hide(){panel.hidden=true;button.setAttribute('aria-pressed','false');}const dock=dockWindow(panel,button,hide);function show(){dock();const terminalPanel=document.getElementById('terminal-panel');if(terminalPanel&&!terminalPanel.hidden)document.getElementById('terminal-hide')?.click();panel.hidden=false;button.setAttribute('aria-pressed','true');if(!el<HTMLSelectElement>('docker-context').options.length)void connections();else void refresh();void composeFiles();}
- button.onclick=()=>panel.hidden?show():hide();el('docker-hide').onclick=hide;// Alt+8: ação tool.docker do keymap central (workbench.ts).
+ function hide(){panel.hidden=true;button.setAttribute('aria-pressed','false');}const dock=dockWindow(panel,button,hide);function show(){dock();const terminalPanel=document.getElementById('terminal-panel');if(terminalPanel&&!terminalPanel.hidden)document.getElementById('terminal-hide')?.click();panel.hidden=false;button.setAttribute('aria-pressed','true');return Promise.all([el<HTMLSelectElement>('docker-context').options.length?refresh():connections(),composeFiles()]);}
+ button.onclick=()=>panel.hidden?void show():hide();el('docker-hide').onclick=hide;// Alt+8: ação tool.docker do keymap central (workbench.ts).
  resizeToolWindow(panel,el('docker-resize'),'php-ide-docker-height');
+ // Editor gutter ▶ (compose.yaml): runs up/stop for the file or one service and reports here, in Services.
+ async function composeFromEditor(file:string,action:'up'|'stop',service?:string){
+  const label=service?`${file} · ${action} ${service}`:`${file} · ${action}`;
+  if(busy){host?.status(tr('Outra operação Docker está em andamento.'));if(panel.hidden)void show();return;}
+  await show();showTab('compose');
+  if(!context()){const reason=el('docker-connection-status').textContent||tr('Nenhum contexto Docker disponível.');message(reason);host?.status(msg`Docker Compose: ${reason}`);return;}
+  if(busy||loading){host?.status(tr('Outra operação Docker está em andamento.'));return;}
+  const select=el<HTMLSelectElement>('docker-compose-file');if(![...select.options].some(o=>o.value===file))select.append(new Option(file,file));select.value=file;el('docker-compose-output').textContent='';
+  const ctx=context();let failed:unknown;
+  await execute(async id=>{try{const result=await api.dockerCompose(ctx,file,action,id,service);el('docker-compose-output').textContent=result;return msg`${label} concluído`;}catch(error){failed=error;el('docker-compose-output').textContent=String(error);throw error;}},true);
+  host?.status(failed?msg`Docker Compose: ${String(failed)}`:msg`${label} concluído`);
+ }
+ if(host?.editor){const gutter=mountComposeGutter(host.editor,()=>host.path(),(file,action,service)=>void composeFromEditor(file,action,service));resetGutter=gutter.refresh;}
  const timer=every(()=>{if(panel.hidden||busy)return;if(tab==='logs'&&el<HTMLInputElement>('docker-follow').checked)void logs();},3000);
- return {reset(){projectEpoch++;epoch++;logsEpoch++;logLoading=false;loading=false;selected=undefined;resourceKey='';rawLogs='';el('docker-summary').textContent='';data=undefined;connected=false;el('docker-tree').replaceChildren();el('docker-logs').textContent='';el('docker-compose-output').textContent='';el<HTMLSelectElement>('docker-compose-file').replaceChildren();hide();controls();},dispose(){offProgress();clearInterval(timer);panel.remove();button.remove();}};
+ return {reset(){resetGutter();projectEpoch++;epoch++;logsEpoch++;logLoading=false;loading=false;selected=undefined;resourceKey='';rawLogs='';el('docker-summary').textContent='';data=undefined;connected=false;el('docker-tree').replaceChildren();el('docker-logs').textContent='';el('docker-compose-output').textContent='';el<HTMLSelectElement>('docker-compose-file').replaceChildren();hide();controls();},dispose(){offProgress();clearInterval(timer);panel.remove();button.remove();}};
 }
